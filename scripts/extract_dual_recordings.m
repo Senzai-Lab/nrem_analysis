@@ -76,3 +76,8 @@ for i = 1:numel(shank_sc)
 
     save(output_path + filenames(i) + "\" + "hd_uid.mat", "hd_uid");
 end
+
+% load openfield and homecage periods
+load(input_path + "MetaAnalysis_20240530-HomeCage-OpenField-Periods.mat");
+save(output_path + "openfield_periods", "OpenFieldPeriods");
+save(output_path + "homecage_periods", "HomeCagePeriods");
