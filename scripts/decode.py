@@ -111,7 +111,7 @@ def main(input_path: str, output_path: str, task_id: int = None, total_tasks: in
             d = result['acausal_posterior']
             states = d.sum(dim='position').to_numpy()
             position = d.sum(dim='state').idxmax(dim='position').to_numpy()
-            combined = nap.TsdFrame(t=t, d=np.hstack((states, position[:, None])), columns=list(STATE_NAMES + ["position"])
+            combined = nap.TsdFrame(t=t, d=np.hstack((states, position[:, None])), columns=list(STATE_NAMES + ["position"]))
             combined.save(fname)
         
         print(f"Finished: {subject_id}")
