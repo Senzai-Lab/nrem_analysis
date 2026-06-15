@@ -26,7 +26,7 @@ def load_tsg(
 
 def plot_intervals(
     intervals: nap.IntervalSet,
-    column: str,
+    column: str = None,
     title: str = None,
     min_dur: float = 2,
     palette: str = 'deep',
@@ -34,25 +34,32 @@ def plot_intervals(
     ax = None
     ):
     intervals = intervals.drop_short_intervals(min_dur)
-    states = np.unique(intervals[column])
-    n_states = len(states)
-    colors = dict(zip(states, sns.color_palette(palette, n_states)))
-    
-    fig_height = figsize[1]
-    bar_height = min(0.8, fig_height / (n_states + 1))  # Leave some padding
     
     if ax is None:
         fig, ax = plt.subplots(figsize=figsize)
     else:
         fig = ax.figure
 
-    for i, state in enumerate(states):
-        epochs = intervals[intervals[column] == state]
-        xranges = np.column_stack([epochs.start, epochs.end - epochs.start])
-        ax.broken_barh(xranges, (i - bar_height/2, bar_height), facecolors=colors[state], edgecolor='none')
-    
-    ax.set_yticks(range(n_states), labels=states)
-    ax.set_ylim(-0.5, n_states - 0.5)
+    if column is None:
+        xranges = np.column_stack([intervals.start, intervals.end - intervals.start])
+        ax.broken_barh(xranges, (0 - 0.4, 0.8), facecolors=sns.color_palette(palette, 1)[0], edgecolor='none')
+        ax.set_yticks([0])
+        ax.set_ylim(-0.5, 0.5)
+    else:
+        states = np.unique(intervals[column])
+        n_states = len(states)
+        colors = dict(zip(states, sns.color_palette(palette, n_states)))
+        
+        fig_height = figsize[1]
+        bar_height = min(0.8, fig_height / (n_states + 1))  # Leave some padding
+
+        for i, state in enumerate(states):
+            epochs = intervals[intervals[column] == state]
+            xranges = np.column_stack([epochs.start, epochs.end - epochs.start])
+            ax.broken_barh(xranges, (i - bar_height/2, bar_height), facecolors=colors[state], edgecolor='none')
+        
+        ax.set_yticks(range(n_states), labels=states)
+        ax.set_ylim(-0.5, n_states - 0.5)
     ax.set_xlabel('Time (s)')
     ax.set_xlim(intervals.start.min(), intervals.end.max())
     ax.spines[['top', 'right']].set_visible(False)

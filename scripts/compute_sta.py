@@ -35,21 +35,23 @@ def main(input_path: str, output_path: str, task_id: int = None, total_tasks: in
             print(f"Data dir {data_dir} does not exist, skipping...")
             continue
 
-        sleep = nap.load_file(input_path / mouse_id / "sleep.npz")
-        turn_units = nap.load_file(input_path / mouse_id / "turn_units.npz")
-        head_direction = nap.load_file(input_path / mouse_id / "head_direction.npz")
-        session = nap.load_file(input_path / mouse_id / "session.npz")
+        sleep = nap.load_file(PROCESSED_DIR / "dual" / mouse_id / "sleep.npz")
+        turn_units = nap.load_file(PROCESSED_DIR / "dual" / mouse_id / "turn_units.npz")
+        head_direction = nap.load_file(PROCESSED_DIR / "dual" / mouse_id / "head_direction.npz")
+        session = nap.load_file(PROCESSED_DIR / "dual" / mouse_id / "session.npz")
         nrem = sleep[sleep['state'] == 'nrem']
-        order = np.argsort(turn_units['turn_index'].values)
 
         virtual_hds = []
+        states = []
         for i, ep in enumerate(nrem.intersect(session[session['state'] == 'homecage'])):
             decoded = nap.load_file(data_dir / f"{mouse_id}_{i}.npz")
             vh = nap.Tsd(t=decoded.t, d=decoded.values[:, 3])
             virtual_hds.append(vh)
-            # states_i = nap.TsdFrame(t=decoded.t, d=decoded.values[:, :3], columns=STATE_NAMES)
-            # states.append(states_i)
+            states_i = nap.TsdFrame(t=decoded.t, d=decoded.values[:, :3], columns=STATE_NAMES)
+            states.append(states_i)
 
+        virtual_hds = np.concatenate(virtual_hds)
+        states = np.concatenate(states)
         for angles, state in zip([head_direction, np.concatenate(virtual_hds)], ["awake", "nrem"]):
             print(f"Computing STA for {state}...")
             angles = np.deg2rad(angles)
@@ -57,9 +59,17 @@ def main(input_path: str, output_path: str, task_id: int = None, total_tasks: in
             sta = nap.compute_event_triggered_average(angles_cart, turn_units, binsize=1, window=(-500, 500), time_unit='ms')
             sta = nap.TsdFrame(t=sta.t, d=np.rad2deg(np.arctan2(sta[:, :, 0].d, sta[:, :, 1].d)))
             sta.save(data_dir / f"sta_{state}.npz")
+        
+        # Compute STA only during continuous epochs of NREM
+        continuous_eps = states['continuous'].threshold(0.5).time_support
+        angles = np.deg2rad(np.concatenate(virtual_hds))
+        angles_cart = np.column_stack([np.sin(angles), np.cos(angles)])
+        sta = nap.compute_event_triggered_average(angles_cart, turn_units, binsize=1, window=(-500, 500), time_unit='ms', epochs=continuous_eps)
+        sta.save(data_dir / f"sta_nrem_cont.npz")
 
         print(f"Finished: {mv} / {mouse_id}")
         print(f"--" * 50)
+
 
 
 if __name__ == "__main__":
