@@ -7,6 +7,7 @@ import pynapple as nap
 
 MOUSE_IDS_DUAL = ["99b", "103c", "106b", "107b", "110b"]
 MOVEMENT_VARS = ["movement_var2", "movement_var20"]
+STATE_NAMES = ["continuous", "fragmented", "stationary"]
 
 
 def main(input_path: str, output_path: str, task_id: int = None, total_tasks: int = None):
@@ -35,10 +36,10 @@ def main(input_path: str, output_path: str, task_id: int = None, total_tasks: in
             print(f"Data dir {data_dir} does not exist, skipping...")
             continue
 
-        sleep = nap.load_file(PROCESSED_DIR / "dual" / mouse_id / "sleep.npz")
-        turn_units = nap.load_file(PROCESSED_DIR / "dual" / mouse_id / "turn_units.npz")
-        head_direction = nap.load_file(PROCESSED_DIR / "dual" / mouse_id / "head_direction.npz")
-        session = nap.load_file(PROCESSED_DIR / "dual" / mouse_id / "session.npz")
+        sleep = nap.load_file(input_path / mouse_id / "sleep.npz")
+        turn_units = nap.load_file(input_path / mouse_id / "turn_units.npz")
+        head_direction = nap.load_file(input_path / mouse_id / "head_direction.npz")
+        session = nap.load_file(input_path / mouse_id / "session.npz")
         nrem = sleep[sleep['state'] == 'nrem']
 
         virtual_hds = []
