@@ -6,9 +6,7 @@ import numpy as np
 import pynapple as nap
 
 MOUSE_IDS_DUAL = ["99b", "103c", "106b", "107b", "110b"]
-MOVEMENT_VARS = ["movement_var2", "movement_var20"]
 STATE_NAMES = ["continuous", "fragmented", "stationary"]
-
 
 def main(input_path: str, output_path: str, task_id: int = None, total_tasks: int = None):
     print(f"Input path: {input_path}")
@@ -21,15 +19,13 @@ def main(input_path: str, output_path: str, task_id: int = None, total_tasks: in
     input_path = Path(input_path)
     output_path = Path(output_path)
 
-    jobs = list(product(MOVEMENT_VARS, MOUSE_IDS_DUAL))
-
-    for job_idx, (mv, mouse_id) in enumerate(jobs):
+    for job_idx, mouse_id in enumerate(MOUSE_IDS_DUAL):
         if task_id is not None and total_tasks is not None:
             if job_idx % total_tasks != task_id:
                 continue
 
-        data_dir = output_path / mv / mouse_id
-        print(f"Processing {mv} / {mouse_id}")
+        data_dir = output_path / "movement_var20" / mouse_id
+        print(f"Processing {mouse_id}")
         print(f"--" * 50)
 
         if not data_dir.exists():
@@ -68,7 +64,7 @@ def main(input_path: str, output_path: str, task_id: int = None, total_tasks: in
         sta = nap.compute_event_triggered_average(angles_cart, turn_units, binsize=1, window=(-500, 500), time_unit='ms', epochs=continuous_eps)
         sta.save(data_dir / f"sta_nrem_cont.npz")
 
-        print(f"Finished: {mv} / {mouse_id}")
+        print(f"Finished: {mouse_id}")
         print(f"--" * 50)
 
 

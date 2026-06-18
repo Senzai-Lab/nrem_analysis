@@ -56,7 +56,7 @@ for i = 1:numel(shank_sc)
     save(output_path + filenames(i) + "\" + "turn_index.mat", "turn_index");
 end
 
-% update metaUnitFeature with HD cell ids for 106b
+%% snippet  update metaUnitFeature with HD cell ids for 106b
 % load("D:\common_datasets\ucsf\raw\dual\106b\YutaTest106b_BayesianDecoding_training_OpenField2.mat");
 % mouse_id = meta.mouseID == 5;
 % shank_id = meta.shankID == 1 | meta.shankID == 2;
