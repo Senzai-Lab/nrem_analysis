@@ -15,8 +15,10 @@ from replay_trajectory_classification import (
 )
 
 STATE_NAMES = ["continuous", "fragmented", "stationary"]
-MOUSE_IDS_DUAL = ["99b", "103c", "106b", "107b", "110b", "111b"]
+MOUSE_IDS_DUAL = ["99b", "103c", "106b", "107b", "110b"]
 BIN_SIZE_S = 0.001
+MOVEMENT_VAR = 20.0
+STATE_PROB = 0.99
 
 def get_environment(num_nodes: int = 360, place_bin_size: float = 1.0):
     radius = 180 / np.pi
@@ -42,7 +44,7 @@ def get_environment(num_nodes: int = 360, place_bin_size: float = 1.0):
         edge_spacing=0,
     )
 
-def fit_classifier(head_direction, train_spikes, movement_var=2.0, state_prob=0.99):
+def fit_classifier(head_direction, train_spikes, movement_var, state_prob):
     environment = get_environment()
     continuous_transition_types = [
         [RandomWalk(movement_var=movement_var), Uniform(), Identity()],
@@ -64,7 +66,6 @@ def main(input_path: str, output_path: str, task_id: int = None, total_tasks: in
         task_id = int(task_id)
         total_tasks = int(total_tasks)
         print(f"Task ID: {task_id} ({task_id}/{total_tasks})")
-
 
     input_path = Path(input_path)
     output_path = Path(output_path)
@@ -90,7 +91,7 @@ def main(input_path: str, output_path: str, task_id: int = None, total_tasks: in
         train_ep = head_direction.time_support
         train_ep = nap.IntervalSet(train_ep.start - dt / 2, train_ep.end + dt / 2) # binned spikes are centered on the middle, so we shift left to align
         train_data = hd_units.count(bin_size=BIN_SIZE_S, ep=train_ep, time_units="s").astype(np.bool_)
-        classifier = fit_classifier(head_direction.values, train_data.values, movement_var=2.0, state_prob=0.99)
+        classifier = fit_classifier(head_direction.values, train_data.values, movement_var=MOVEMENT_VAR, state_prob=STATE_PROB)
         
         predict_ep = sleep[sleep['state'] == 'nrem'].intersect(session[session['state'] == 'homecage']) 
         for i, epoch in enumerate(predict_ep):
@@ -111,7 +112,7 @@ def main(input_path: str, output_path: str, task_id: int = None, total_tasks: in
             d = result['acausal_posterior']
             states = d.sum(dim='position').to_numpy()
             position = d.sum(dim='state').idxmax(dim='position').to_numpy()
-            combined = nap.TsdFrame(t=t, d=np.hstack((states, position[:, None])), columns=list(STATE_NAMES + ["position"]))
+            combined = nap.TsdFrame(t=t, d=np.hstack((states, position[:, None])), columns=STATE_NAMES + ["position"])
             combined.save(fname)
         
         print(f"Finished: {subject_id}")
