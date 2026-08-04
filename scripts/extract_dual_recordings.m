@@ -81,3 +81,23 @@ end
 load(input_path + "MetaAnalysis_20240530-HomeCage-OpenField-Periods.mat");
 save(output_path + "openfield_periods", "OpenFieldPeriods");
 save(output_path + "homecage_periods", "HomeCagePeriods");
+
+
+%% Load dual recording mice
+filenames = ["99b", "100b", "102b", "103c", "106b", "107b", "110b", "111b"];
+
+% get indices other than 100b, 102b and 11b
+mask = (meta.mouseID == 2 ) | (meta.mouseID == 3) | (meta.mouseID == 8);
+mask = ~mask;
+mask = meta.SC_TurnModCell & mask;
+
+% sta
+sta = meta.spktrg_head(mask, :);
+tsi = meta.TurnIdx(mask);
+[tsi_sorted, order] = sort(tsi);
+sta_sorted = sta(order, :);
+sta_t = meta.spktrg_head_t;
+
+save(output_path + "sta_t", "sta_t");
+save(output_path + "sta_awake_sorted", "sta_sorted");
+save(output_path + "tsi_sorted", "tsi_sorted");
