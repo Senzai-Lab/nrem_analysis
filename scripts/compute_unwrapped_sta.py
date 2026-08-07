@@ -73,8 +73,9 @@ def compute_unwrapped_sta(
             time_unit=time_unit,
         )
 
-        sta = np.nanmean(perievent, axis=1)
-        sta = sta.bin_average(bin_size=bin_size, time_units=time_unit,)
+        zero_idx = np.argmin(np.abs(perievent.index))
+        sta = np.nanmean(perievent - perievent[zero_idx], axis=1)
+        sta = sta.bin_average(bin_size=bin_size, time_units=time_unit)
         zero_idx = np.argmin(np.abs(sta.index))
         sta = sta - sta[zero_idx]
 
