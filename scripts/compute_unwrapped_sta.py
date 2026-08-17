@@ -140,7 +140,7 @@ def main(
         turn_units      = nap.load_file(data_dir / "turn_units.npz")
         sleep           = nap.load_file(data_dir / "sleep.npz")
         session         = nap.load_file(data_dir / "session.npz")
-        virtual_hd      = nap.load_file(data_dir / "virtual_hd.npz")
+        virtual_hd      = nap.load_file(save_dir / "virtual_hd.npz")
 
         nrem            = sleep[sleep['state'] == 'nrem'].intersect(session[session['state'] == 'homecage'])
         print("Detecting upstates")

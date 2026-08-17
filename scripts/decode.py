@@ -3,6 +3,7 @@ from pathlib import Path
 
 import numpy as np
 import pynapple as nap
+from scipy.stats import entropy
 
 from replay_trajectory_classification import (
     SortedSpikesClassifier,
@@ -17,8 +18,15 @@ from replay_trajectory_classification import (
 STATE_NAMES = ["continuous", "fragmented", "stationary"]
 MOUSE_IDS_DUAL = ["99b", "103c", "106b", "107b", "110b"]
 BIN_SIZE_S = 0.001
-MOVEMENT_VAR = 20.0
+MOVEMENT_VAR = 2.0
 STATE_PROB = 0.99
+
+
+def save_atomic(data, path: Path):
+    temporary_path = path.with_suffix(".tmp.npz")
+    data.save(temporary_path)
+    temporary_path.replace(path)
+
 
 def get_environment(num_nodes: int = 360, place_bin_size: float = 1.0):
     radius = 180 / np.pi
@@ -62,9 +70,18 @@ def fit_classifier(head_direction, train_spikes, movement_var, state_prob):
 def main(input_path: str, output_path: str, task_id: int = None, total_tasks: int = None):
     print(f"Input path: {input_path}")
     print(f"Output path: {output_path}")
-    if task_id is not None and total_tasks is not None:
+    if (task_id is None) != (total_tasks is None):
+        raise ValueError("task_id and total_tasks must be provided together.")
+    if task_id is not None:
         task_id = int(task_id)
         total_tasks = int(total_tasks)
+        if total_tasks <= 0:
+            raise ValueError("total_tasks must be greater than zero.")
+        if not 0 <= task_id < total_tasks:
+            raise ValueError(
+                "task_id must be zero-based and satisfy "
+                "0 <= task_id < total_tasks."
+            )
         print(f"Task ID: {task_id} ({task_id}/{total_tasks})")
 
     input_path = Path(input_path)
@@ -98,8 +115,14 @@ def main(input_path: str, output_path: str, task_id: int = None, total_tasks: in
             if task_id is not None and total_tasks is not None:
                 if i % total_tasks != task_id:
                     continue
-            fname = save_dir / f"{subject_id}_{i}.npz"
-            if fname.is_file():
+
+            output_paths = {
+                "states": save_dir / f"{subject_id}_{i}_states.npz",
+                "position_posterior": save_dir / f"{subject_id}_{i}_position_posterior.npz",
+                "position": save_dir / f"{subject_id}_{i}_position.npz",
+                "entropy": save_dir / f"{subject_id}_{i}_entropy.npz",
+            }
+            if all(path.is_file() for path in output_paths.values()):
                 continue
             
             start, end = epoch.start.item(), epoch.end.item()
@@ -110,10 +133,30 @@ def main(input_path: str, output_path: str, task_id: int = None, total_tasks: in
             
             t = result['time'].to_numpy()
             d = result['acausal_posterior']
-            states = d.sum(dim='position').to_numpy()
-            position = d.sum(dim='state').idxmax(dim='position').to_numpy()
-            combined = nap.TsdFrame(t=t, d=np.hstack((states, position[:, None])), columns=STATE_NAMES + ["position"])
-            combined.save(fname)
+            p = d.sum(dim='state')
+            outputs = {
+                "states": nap.TsdFrame(
+                    t=t,
+                    d=d.sum(dim='position').to_numpy(),
+                    columns=STATE_NAMES,
+                ),
+                "position_posterior": nap.TsdFrame(
+                    t=t,
+                    d=p.to_numpy().astype(np.float32, copy=False),
+                    columns=p['position'].to_numpy(),
+                ),
+                "position": nap.Tsd(
+                    t=t,
+                    d=p.idxmax(dim='position').to_numpy(),
+                ),
+                "entropy": nap.Tsd(
+                    t=t,
+                    d=entropy(p.to_numpy(), axis=1) / np.log(p.sizes['position']),
+                ),
+            }
+
+            for name, data in outputs.items():
+                save_atomic(data, output_paths[name])
         
         print(f"Finished: {subject_id}")
         print(f"--" * 50)
