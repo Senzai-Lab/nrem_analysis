@@ -17,6 +17,8 @@ from replay_trajectory_classification import (
 
 STATE_NAMES = ["continuous", "fragmented", "stationary"]
 MOUSE_IDS_DUAL = ["99b", "103c", "106b", "107b", "110b"]
+MOUSE_IDS_TTX = ["83b", "85b", "116b", "119b"]
+
 BIN_SIZE_S = 0.001
 MOVEMENT_VAR = 2.0
 STATE_PROB = 0.99
