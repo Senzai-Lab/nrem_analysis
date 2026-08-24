@@ -8,6 +8,12 @@ import pynapple as nap
 MOUSE_IDS_DUAL = ["99b", "103c", "106b", "107b", "110b"]
 
 
+def save_atomic(data, path: Path):
+    temporary_path = path.with_suffix(".tmp.npz")
+    data.save(temporary_path)
+    temporary_path.replace(path)
+
+
 def concatenate_positions(input_path: Path, output_path: Path, mouse_id: str):
     sleep = nap.load_file(input_path / mouse_id / "sleep.npz")
     session = nap.load_file(input_path / mouse_id / "session.npz")
@@ -20,26 +26,35 @@ def concatenate_positions(input_path: Path, output_path: Path, mouse_id: str):
         data_dir / f"{mouse_id}_{i}_position.npz"
         for i in range(len(predict_ep))
     ]
-    missing_indices = [
-        i for i, path in enumerate(position_paths) if not path.is_file()
+    state_paths = [
+        data_dir / f"{mouse_id}_{i}_states.npz"
+        for i in range(len(predict_ep))
     ]
-    if missing_indices:
-        raise FileNotFoundError(
-            f"Missing decoded position files for {mouse_id}, "
-            f"epoch indices: {missing_indices}"
-        )
     if not position_paths:
         raise ValueError(f"No NREM homecage epochs found for {mouse_id}.")
+    missing_paths = [
+        path for path in position_paths + state_paths if not path.is_file()
+    ]
+    if missing_paths:
+        raise FileNotFoundError(
+            f"Missing decoded files for {mouse_id}: "
+            f"{[path.name for path in missing_paths]}"
+        )
 
-    print(f"Concatenating {len(position_paths)} position files for {mouse_id}")
-    position_epochs = [nap.load_file(path) for path in position_paths]
-    virtual_hd = np.concatenate(position_epochs)
+    print(
+        f"Concatenating {len(position_paths)} position and state files "
+        f"for {mouse_id}"
+    )
+    virtual_hd = np.concatenate([nap.load_file(path) for path in position_paths])
+    virtual_states = np.concatenate([nap.load_file(path) for path in state_paths])
 
     virtual_hd_path = data_dir / "virtual_hd.npz"
     print(f"Saving concatenated position: {virtual_hd_path}")
-    temporary_path = virtual_hd_path.with_suffix(".tmp.npz")
-    virtual_hd.save(temporary_path)
-    temporary_path.replace(virtual_hd_path)
+    save_atomic(virtual_hd, virtual_hd_path)
+
+    virtual_states_path = data_dir / "virtual_states.npz"
+    print(f"Saving concatenated states: {virtual_states_path}")
+    save_atomic(virtual_states, virtual_states_path)
 
 
 def main(input_path: str, output_path: str):
