@@ -13,3 +13,4 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 FIGURES_DIR = PROJECT_ROOT / "figures"
 
 MOUSE_IDS_DUAL = ["99b", "100b", "102b", "103c", "106b", "107b", "110b", "111b"]
+MOUSE_IDS_TTX = ["83b", "85b", "116b", "119b"]
