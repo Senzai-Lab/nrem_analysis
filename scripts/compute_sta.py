@@ -37,18 +37,20 @@ def load_virtual_hds(input_path, data_dir, mouse_id, with_states=False):
     virtual_hds = []
     states = []
     for i, _ in enumerate(nrem_homecage):
-        decoded_path = data_dir / f"{mouse_id}_{i}.npz"
-        print(f"Loading decoded epoch {i + 1}/{len(nrem_homecage)}: {decoded_path}")
-        decoded = nap.load_file(decoded_path)
-        virtual_hds.append(nap.Tsd(t=decoded.t, d=decoded.values[:, 3]))
+        position_path = data_dir / f"{mouse_id}_{i}_position.npz"
+        print(
+            f"Loading decoded position for epoch {i + 1}/{len(nrem_homecage)}: "
+            f"{position_path}"
+        )
+        virtual_hds.append(nap.load_file(position_path))
+
         if with_states:
-            states.append(
-                nap.TsdFrame(
-                    t=decoded.t,
-                    d=decoded.values[:, :3],
-                    columns=STATE_NAMES,
-                )
+            states_path = data_dir / f"{mouse_id}_{i}_states.npz"
+            print(
+                f"Loading decoded states for epoch {i + 1}/{len(nrem_homecage)}: "
+                f"{states_path}"
             )
+            states.append(nap.load_file(states_path))
 
     virtual_hds = np.concatenate(virtual_hds)
     print(f"Loaded virtual HD samples: {virtual_hds.shape[0]}")

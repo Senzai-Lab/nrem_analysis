@@ -172,8 +172,6 @@ def main(
     output_path: str,
     task_id: int,
     total_tasks: int,
-    min_rate_hz: float = DEFAULT_MIN_RATE_HZ,
-    max_rate_hz: float = DEFAULT_MAX_RATE_HZ,
 ):
     print(f"Input path: {input_path}")
     print(f"Output path: {output_path}")
@@ -182,12 +180,14 @@ def main(
 
     task_id = int(task_id)
     total_tasks = int(total_tasks)
-    min_rate_hz = float(min_rate_hz)
-    max_rate_hz = float(max_rate_hz)
+    min_rate_hz = DEFAULT_MIN_RATE_HZ
+    max_rate_hz = DEFAULT_MAX_RATE_HZ
+
     if total_tasks <= 0:
         raise ValueError("total_tasks must be positive")
     if not 0 <= task_id < total_tasks:
         raise ValueError("task_id must satisfy 0 <= task_id < total_tasks")
+
     print(f"Task ID: {task_id} ({task_id}/{total_tasks})")
     print(f"Random units per mouse: {N_RANDOM_UNITS}")
     print(f"Random rate range: [{min_rate_hz}, {max_rate_hz}] Hz")
@@ -255,15 +255,12 @@ if __name__ == "__main__":
             "Usage: python compute_unwrapped_sta_random.py "
             "<input_path> <output_path> "
             "<task_id> <total_tasks> "
-            "[min_rate_hz max_rate_hz]"
         )
         sys.exit(1)
 
-    rate_args = sys.argv[5:7]
     main(
         sys.argv[1],
         sys.argv[2],
         sys.argv[3],
         sys.argv[4],
-        *rate_args,
     )
