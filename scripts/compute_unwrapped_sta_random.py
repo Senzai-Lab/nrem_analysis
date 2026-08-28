@@ -3,6 +3,7 @@ from pathlib import Path
 
 import numpy as np
 import pynapple as nap
+from scipy import stats
 
 
 MOUSE_IDS_DUAL = ["99b", "103c", "106b", "107b", "110b"]
@@ -11,13 +12,50 @@ N_RANDOM_UNITS = 30
 DEFAULT_MIN_RATE_HZ = 1.0
 DEFAULT_MAX_RATE_HZ = 20.0
 RANDOM_SEED = 0
-PERIEVENT_CHUNK_SIZE = 2_000
 
-STA_KWARGS = dict(
-    bin_size=2,
-    window=(-501, 501),
+NREM_STA_KWARGS = dict(
+    window=(-51, 51),
     time_unit="ms",
 )
+
+
+def detect_upstates(
+    spikes: nap.TsGroup,
+    bin_size=0.01,
+    percentile=80,
+    merge_thr=0.1,
+    short_thr=0.04,
+    long_thr=2,
+    time_units="s",
+):
+    population_rate = spikes.count(
+        bin_size=bin_size,
+        time_units=time_units,
+    ).sum(axis=1)
+    population_rate = population_rate / bin_size
+    population_rate = population_rate.smooth(
+        std=2 * bin_size,
+        time_units=time_units,
+    )
+    threshold = np.percentile(population_rate, q=percentile)
+
+    up_states = population_rate.threshold(
+        threshold,
+        method="above",
+    ).time_support
+    up_states = up_states.merge_close_intervals(
+        threshold=merge_thr,
+        time_units=time_units,
+    )
+    up_states = up_states.drop_short_intervals(
+        threshold=short_thr,
+        time_units=time_units,
+    )
+    up_states = up_states.drop_long_intervals(
+        threshold=long_thr,
+        time_units=time_units,
+    )
+    return up_states, threshold
 
 
 def generate_poisson_spikes(
@@ -68,7 +106,7 @@ def generate_poisson_spikes(
     )
 
 
-def unwrap_epochs(data):
+def unwrap_epochs(data: nap.Tsd) -> nap.Tsd:
     d = data.d.copy()
     t = data.t
 
@@ -84,87 +122,125 @@ def unwrap_epochs(data):
 
 
 def compute_unwrapped_sta(
-    data,
-    units,
-    bin_size,
+    data: nap.Tsd,
+    units: nap.TsGroup,
+    *,
     window,
     time_unit,
-    fill_value=np.nan,
-    event_chunk_size=PERIEVENT_CHUNK_SIZE,
 ):
-    if event_chunk_size <= 0:
-        raise ValueError("event_chunk_size must be positive")
+    """Compute complete-event STAs and SEMs after zero-lag centering."""
 
     stas = []
+    errors = []
     times = None
 
     for uid in units.index:
         events = units[uid].restrict(data.time_support)
 
         if len(events) == 0:
-            print(f"Filling unit {uid} with {fill_value}")
+            print(f"No events in {uid}. Filling with NaN")
             stas.append(None)
+            errors.append(None)
             continue
 
-        event_times = events.t
-        lag_times = None
-        summed = None
-        counts = None
-
-        for start in range(0, len(event_times), event_chunk_size):
-            chunk = nap.Ts(
-                t=event_times[start:start + event_chunk_size],
-                time_units="s",
-                time_support=events.time_support,
-            )
-            perievent = nap.compute_perievent(
-                data=data,
-                events=chunk,
-                window=window,
-                time_unit=time_unit,
-            )
-
-            zero_idx = np.argmin(np.abs(perievent.index))
-            centered = perievent.d - perievent.d[zero_idx]
-
-            if summed is None:
-                lag_times = perievent.t
-                summed = np.zeros(centered.shape[0], dtype=float)
-                counts = np.zeros(centered.shape[0], dtype=np.int64)
-
-            summed += np.nansum(centered, axis=1)
-            counts += np.count_nonzero(~np.isnan(centered), axis=1)
-
-        mean_sta = np.full(summed.shape, np.nan)
-        np.divide(summed, counts, out=mean_sta, where=counts > 0)
-        sta = nap.Tsd(
-            t=lag_times,
-            d=mean_sta,
-            time_support=perievent.time_support,
+        perievent = nap.compute_perievent(
+            data=data,
+            events=events,
+            window=window,
+            time_unit=time_unit,
         )
-        sta = sta.bin_average(bin_size=bin_size, time_units=time_unit)
-        zero_idx = np.argmin(np.abs(sta.index))
-        sta = sta - sta[zero_idx]
 
-        times = sta.t
+        complete_events = ~np.any(np.isnan(perievent.d), axis=0)
+        perievent = perievent[:, complete_events]
+        if perievent.shape[1] == 0:
+            print(f"No complete events in {uid}. Filling with NaN")
+            stas.append(None)
+            errors.append(None)
+            continue
+
+        zero_idx = np.argmin(np.abs(perievent.index))
+        perievent = perievent - perievent[zero_idx]
+
+        sta = np.mean(perievent, axis=1)
         stas.append(sta.d)
+        errors.append(stats.sem(perievent.d, axis=1))
+        times = sta.t
 
     if times is None:
-        raise ValueError("No units have events within data.time_support.")
+        raise ValueError(
+            "No units have complete events within data.time_support."
+        )
 
     stas = [
-        np.full(times.shape, fill_value) if sta is None else sta
+        np.full(times.shape, np.nan) if sta is None else sta
         for sta in stas
     ]
+    errors = [
+        np.full(times.shape, np.nan) if error is None else error
+        for error in errors
+    ]
 
-    return nap.TsdFrame(
+    sta = nap.TsdFrame(
         t=times,
         d=np.column_stack(stas),
         columns=units.index,
-        metadata={
-            "simulated_rate_hz": units["simulated_rate_hz"].to_numpy(),
-        },
     )
+    error = nap.TsdFrame(
+        t=times,
+        d=np.column_stack(errors),
+        columns=units.index,
+    )
+    return sta, error
+
+
+def process_mouse(
+    data_dir: Path,
+    save_dir: Path,
+    mouse_idx: int,
+):
+    turn_units = nap.load_file(data_dir / "turn_units.npz")
+    hd_units = nap.load_file(data_dir / "hd_units.npz")
+    virtual_hd = nap.load_file(data_dir / "virtual_hd.npz")
+    sleep = nap.load_file(data_dir / "sleep.npz")
+    session = nap.load_file(data_dir / "session.npz")
+
+    nrem = sleep[sleep["state"] == "nrem"].intersect(
+        session[session["state"] == "homecage"]
+    )
+    print("Detecting NREM upstates")
+    up_states, _ = detect_upstates(hd_units.restrict(nrem))
+    up_hd = virtual_hd.restrict(up_states)
+    up_hd = unwrap_epochs(np.deg2rad(up_hd))
+
+    print("Computing NREM upstate STA with real spikes")
+    sta_real, _ = compute_unwrapped_sta(
+        data=up_hd,
+        units=turn_units,
+        **NREM_STA_KWARGS,
+    )
+    real_output = save_dir / "sta_nrem_upstate.npz"
+    print(f"Saving real-spike STA: {real_output}")
+    sta_real.save(real_output)
+
+    random_units = generate_poisson_spikes(
+        t_start=virtual_hd.start_time(),
+        t_end=virtual_hd.end_time(),
+        n_units=N_RANDOM_UNITS,
+        min_rate_hz=DEFAULT_MIN_RATE_HZ,
+        max_rate_hz=DEFAULT_MAX_RATE_HZ,
+        seed=RANDOM_SEED + mouse_idx,
+        time_support=up_hd.time_support,
+    )
+
+    print("Computing NREM upstate STA with random spikes")
+    sta_random, _ = compute_unwrapped_sta(
+        data=up_hd,
+        units=random_units,
+        **NREM_STA_KWARGS,
+    )
+    random_output = save_dir / "sta_random_spikes.npz"
+    print(f"Saving random-spike STA: {random_output}")
+    sta_random.save(random_output)
 
 
 def main(
@@ -180,32 +256,28 @@ def main(
 
     task_id = int(task_id)
     total_tasks = int(total_tasks)
-    min_rate_hz = DEFAULT_MIN_RATE_HZ
-    max_rate_hz = DEFAULT_MAX_RATE_HZ
-
     if total_tasks <= 0:
         raise ValueError("total_tasks must be positive")
     if not 0 <= task_id < total_tasks:
         raise ValueError("task_id must satisfy 0 <= task_id < total_tasks")
 
-    print(f"Task ID: {task_id} ({task_id}/{total_tasks})")
-    print(f"Random units per mouse: {N_RANDOM_UNITS}")
-    print(f"Random rate range: [{min_rate_hz}, {max_rate_hz}] Hz")
-
     selected_mice = [
-        mouse_id
+        (mouse_idx, mouse_id)
         for mouse_idx, mouse_id in enumerate(MOUSE_IDS_DUAL)
         if mouse_idx % total_tasks == task_id
     ]
 
+    print(f"Task ID: {task_id} ({task_id}/{total_tasks})")
+    print(f"Random units per mouse: {N_RANDOM_UNITS}")
+    print(
+        "Random rate range: "
+        f"[{DEFAULT_MIN_RATE_HZ}, {DEFAULT_MAX_RATE_HZ}] Hz"
+    )
     print(f"Selected mice for this task: {len(selected_mice)}")
-    for mouse_id in selected_mice:
+    for _, mouse_id in selected_mice:
         print(f"  {mouse_id}")
 
-    for mouse_idx, mouse_id in enumerate(MOUSE_IDS_DUAL):
-        if mouse_idx % total_tasks != task_id:
-            continue
-
+    for mouse_idx, mouse_id in selected_mice:
         data_dir = input_path / mouse_id
         save_dir = output_path / mouse_id
         save_dir.mkdir(parents=True, exist_ok=True)
@@ -217,44 +289,19 @@ def main(
         print(f"Data directory: {data_dir}")
         print("-" * 100)
 
-        virtual_hd = nap.load_file(data_dir / "virtual_hd.npz")
-        random_units = generate_poisson_spikes(
-            t_start=virtual_hd.start_time(),
-            t_end=virtual_hd.end_time(),
-            n_units=N_RANDOM_UNITS,
-            min_rate_hz=min_rate_hz,
-            max_rate_hz=max_rate_hz,
-            seed=RANDOM_SEED + mouse_idx,
-            time_support=virtual_hd.time_support,
-        )
-
-        print("Computing whole-session STA with random spikes")
-        sta_random = compute_unwrapped_sta(
-            data=unwrap_epochs(np.deg2rad(virtual_hd)),
-            units=random_units,
-            **STA_KWARGS,
-        )
-
-        output_file = save_dir / "sta_random_spikes.npz"
-        print(f"Saving random-spike STA: {output_file}")
-        sta_random.save(output_file)
+        process_mouse(data_dir, save_dir, mouse_idx)
 
         print(f"Finished mouse: {mouse_id}")
         print("-" * 100)
 
 
 if __name__ == "__main__":
-    print("Python version")
-    print(sys.version)
-    print("Version info")
-    print(sys.version_info)
-
-    if len(sys.argv) not in (5, 7):
+    if len(sys.argv) != 5:
         print(f"Incorrect number of arguments: {len(sys.argv) - 1}")
         print(
             "Usage: python compute_unwrapped_sta_random.py "
             "<input_path> <output_path> "
-            "<task_id> <total_tasks> "
+            "<task_id> <total_tasks>"
         )
         sys.exit(1)
 

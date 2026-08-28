@@ -1,11 +1,9 @@
 import sys
 from pathlib import Path
+from nrem_analysis.constant import MOUSE_IDS_TTX
 
 import numpy as np
 import pynapple as nap
-
-
-MOUSE_IDS_DUAL = ["99b", "103c", "106b", "107b", "110b"]
 
 
 def save_atomic(data, path: Path):
@@ -16,12 +14,13 @@ def save_atomic(data, path: Path):
 
 def concatenate_positions(input_path: Path, output_path: Path, mouse_id: str):
     sleep = nap.load_file(input_path / mouse_id / "sleep.npz")
-    session = nap.load_file(input_path / mouse_id / "session.npz")
+    sessions = nap.load_file(input_path / mouse_id / "sessions.npz")
     predict_ep = sleep[sleep["state"] == "nrem"].intersect(
-        session[session["state"] == "homecage"]
+        sessions[sessions["label"] == "homecage"]
     )
 
     data_dir = output_path / mouse_id
+    save_dir = input_path / mouse_id
     position_paths = [
         data_dir / f"{mouse_id}_{i}_position.npz"
         for i in range(len(predict_ep))
@@ -48,11 +47,11 @@ def concatenate_positions(input_path: Path, output_path: Path, mouse_id: str):
     virtual_hd = np.concatenate([nap.load_file(path) for path in position_paths])
     virtual_states = np.concatenate([nap.load_file(path) for path in state_paths])
 
-    virtual_hd_path = data_dir / "virtual_hd.npz"
+    virtual_hd_path = save_dir / "virtual_hd.npz"
     print(f"Saving concatenated position: {virtual_hd_path}")
     save_atomic(virtual_hd, virtual_hd_path)
 
-    virtual_states_path = data_dir / "virtual_states.npz"
+    virtual_states_path = save_dir / "virtual_states.npz"
     print(f"Saving concatenated states: {virtual_states_path}")
     save_atomic(virtual_states, virtual_states_path)
 
@@ -63,7 +62,7 @@ def main(input_path: str, output_path: str):
     input_path = Path(input_path)
     output_path = Path(output_path)
 
-    for mouse_id in MOUSE_IDS_DUAL:
+    for mouse_id in MOUSE_IDS_TTX:
         concatenate_positions(input_path, output_path, mouse_id)
 
 
