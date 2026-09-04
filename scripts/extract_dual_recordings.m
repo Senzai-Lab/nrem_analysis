@@ -48,12 +48,15 @@ for i = 1:numel(shank_sc)
     
     turn_uid = meta.unitIDshank(mask); % Cluster IDs for Turn modulated cell
     turn_index = meta.TurnIdx(mask); % Turn modulation strength, >0 is CW, <0 is CCW
-    
-    fprintf("Mouse ID: %s (%d), Turn Modulated Cell Count: %d ", filenames(i), i, numel(turn_uid));
+    virtual_turn_index = meta.VirtualTurnIdx_REM(mask);
+
+    fprintf("Mouse ID: %s (%d), Turn Modulated Cell Count: %d\n", filenames(i), i, numel(turn_uid));
     fprintf("CW Turn cells: %d, CCW Turn cells: %d\n", sum(turn_index>0), sum(turn_index<0));
+    fprintf("REM CW Turn cells: %d, REM CCW Turn cells: %d\n", sum(virtual_turn_index>0), sum(virtual_turn_index<0));
     
     save(output_path + filenames(i) + "\" + "turn_uid.mat", "turn_uid");
     save(output_path + filenames(i) + "\" + "turn_index.mat", "turn_index");
+    save(output_path + filenames(i) + "\" + "virtual_turn_index.mat", "virtual_turn_index");
 end
 
 %% snippet  update metaUnitFeature with HD cell ids for 106b
